@@ -1,0 +1,49 @@
+import pandas as pd
+import requests
+from flask import Flask, request, jsonify
+
+# Google Sheets API URL from Apps Script
+GOOGLE_SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbwE_GWswOw5qfn95MjjGeV-R_9-BWczDdvrWJnLe9Vr-0e-UW5WE_gfZNt-OJL7W7cY9w/exec"
+
+app = Flask(__name__)
+
+def fetch_wine_data():
+    """Fetches wine data from Google Sheets Web App."""
+    response = requests.get(GOOGLE_SHEETS_API_URL)
+    if response.status_code == 200:
+        return pd.DataFrame(response.json())
+    else:
+        return None
+
+@app.route('/recommend', methods=['GET'])
+def recommend_wine():
+    query = request.args.get('query', '').lower()
+    wine_data = fetch_wine_data()
+    if wine_data is None:
+        return jsonify({"error": "Failed to fetch wine data"})
+    
+    # Simple filtering logic based on keywords
+    filters = {
+        'full-bodied': 'Full',
+        'medium-bodied': 'Medium',
+        'light-bodied': 'Light',
+        'crisp': 'High',
+        'low tannins': 'Low',
+        'high acidity': 'High',
+        'seafood': 'Seafood',
+        'steak': 'Steak',
+        'chillable': 'Slight chill recommended'
+    }
+    
+    matches = wine_data.copy()
+    for keyword, value in filters.items():
+        if keyword in query:
+            matches = matches[matches.apply(lambda row: value.lower() in row.to_string().lower(), axis=1)]
+    
+    # Return top 5 matches
+    recommendations = matches.head(5)[['Wine Name', 'Varietal(s)', 'Region', 'Tasting Notes', 'Food Pairings']].to_dict(orient='records')
+    
+    return jsonify({'recommendations': recommendations})
+
+if __name__ == '__main__':
+    app.run(debug=True)
